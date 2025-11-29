@@ -164,6 +164,16 @@ pytest product-service/tests/
 
 > 💡 **提示**：测试用例正在完善中，欢迎贡献！
 
+### CI/CD
+
+项目使用 GitHub Actions 进行持续集成：
+
+- 每次 push 自动运行 pytest
+- 验证 Docker 镜像构建
+- 检查代码格式和基本语法
+
+查看 `.github/workflows/ci.yml` 了解详情。
+
 ## 🚀 进阶方向
 
 - ✅ **已完成**：独立数据库、事件驱动、容错重试、Docker Compose
