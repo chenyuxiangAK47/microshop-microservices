@@ -2,7 +2,70 @@
 
 一个面向学习/作品集的 Python 微服务示例，展示了“可上线”的工程化实践：独立数据库、服务间 API 调用、RabbitMQ 事件驱动、容错重试、Docker Compose 一键启动。
 
-## 架构速览
+## 🏗️ 架构图
+
+```mermaid
+graph TB
+    Client[客户端/API 调用者] --> OrderService[订单服务<br/>order-service:8003]
+    OrderService -->|HTTP 调用| UserService[用户服务<br/>user-service:8001]
+    OrderService -->|HTTP 调用| ProductService[商品服务<br/>product-service:8002]
+    OrderService -->|发布事件| RabbitMQ[RabbitMQ<br/>订单事件总线]
+    RabbitMQ -->|异步消费| ProductService
+    
+    OrderService --> OrdersDB[(orders_db<br/>PostgreSQL)]
+    UserService --> UsersDB[(users_db<br/>PostgreSQL)]
+    ProductService --> ProductsDB[(products_db<br/>PostgreSQL)]
+    
+    style OrderService fill:#e1f5ff
+    style UserService fill:#e1f5ff
+    style ProductService fill:#e1f5ff
+    style RabbitMQ fill:#fff4e1
+    style OrdersDB fill:#e8f5e9
+    style UsersDB fill:#e8f5e9
+    style ProductsDB fill:#e8f5e9
+```
+
+### 核心流程：下单 → 事件 → 扣库存
+
+1. **客户端调用订单服务**：`POST /api/orders`
+2. **订单服务同步校验**：
+   - HTTP 调用用户服务验证用户存在
+   - HTTP 调用商品服务验证库存充足
+3. **订单服务写入本地数据库**：`orders_db`
+4. **订单服务发布事件**：通过 RabbitMQ 发布 `ORDER_CREATED` 事件
+5. **商品服务异步消费**：监听 RabbitMQ，收到事件后扣减库存（`products_db`）
+
+**为什么这样设计？**
+- **解耦**：订单服务不需要等待库存扣减完成，提高响应速度
+- **最终一致性**：即使商品服务暂时不可用，订单已创建，库存稍后扣减
+- **可扩展**：未来可以轻松添加其他消费者（如通知服务、统计服务）
+
+## 📚 What You'll Learn
+
+通过这个项目，你将理解并实践：
+
+### 1. 微服务数据自治（Database per Service）
+- 每个服务拥有独立的数据库，避免跨服务直接访问数据
+- 通过 API 和事件进行服务间通信，而不是共享数据库
+
+### 2. 事件驱动架构（Event-Driven Architecture）
+- 使用 RabbitMQ 实现异步事件发布/订阅
+- 理解最终一致性：订单创建和库存扣减是异步的
+
+### 3. 服务间通信的容错设计
+- **超时保护**：防止下游服务挂起导致请求被卡住
+- **自动重试**：网络抖动时自动重试，提高成功率
+- **错误分类**：区分业务错误（404）和系统错误（500/超时），返回合适的 HTTP 状态码
+
+### 4. Docker Compose 多容器编排
+- 一键启动完整的微服务环境（数据库、消息队列、业务服务）
+- 理解容器间网络通信和服务依赖
+
+### 5. 可观测性（Observability）
+- 结构化日志记录每次服务间调用的详细信息
+- 记录调用耗时、状态码，便于快速定位问题
+
+## 🏗️ 架构速览
 
 | 服务            | 端口 | 负责内容                                   | 数据库          |
 |-----------------|------|--------------------------------------------|-----------------|
@@ -76,12 +139,40 @@ curl http://localhost:8002/api/products/1
 └─.gitignore
 ```
 
-## TODO / 进阶方向
+## 🧪 Testing
 
-- Redis 缓存/幂等性：例如订单接口传 `request_id`，用 Redis 保证“不重复扣款”。
-- CI/CD：加上 `pytest`、`docker build` 的 GitHub Actions。
-- 观测性：接入 OpenTelemetry/Jaeger，实现链路追踪。
-- API 网关 / 身份认证：继续拆分出 auth-service，演示统一鉴权。
+### 运行测试
+
+```bash
+# 安装测试依赖
+pip install pytest pytest-asyncio httpx
+
+# 运行所有测试
+pytest
+
+# 运行特定服务的测试
+pytest user-service/tests/
+pytest order-service/tests/
+pytest product-service/tests/
+```
+
+### 测试覆盖
+
+- **Unit Tests**：测试业务逻辑（如订单创建、库存扣减）
+- **Integration Tests**：测试服务间 HTTP 调用和事件消费
+- **E2E Tests**：使用 Docker Compose 启动完整环境，测试端到端流程
+
+> 💡 **提示**：测试用例正在完善中，欢迎贡献！
+
+## 🚀 进阶方向
+
+- ✅ **已完成**：独立数据库、事件驱动、容错重试、Docker Compose
+- 🔄 **进行中**：单元测试、集成测试、CI/CD
+- 📋 **计划中**：
+  - Redis 缓存/幂等性：订单接口传 `request_id`，用 Redis 保证“不重复扣款”
+  - 链路追踪：接入 OpenTelemetry/Jaeger，实现分布式追踪
+  - API 网关：拆分出 auth-service，演示统一鉴权
+  - 监控告警：Prometheus + Grafana 监控服务健康度
 
 ## License
 
